@@ -1,20 +1,20 @@
-# AgentNav
+# GPT-VLN
 
-Action-chunk VLN in Habitat. One inference per turn: uniformly sampled history
-frames plus the annotated current view go in, a continuous motion chunk comes
-out, and a depth-guarded executor runs it.
+AgentVLN-style waypoint navigation in Habitat, with the local VLM replaced by a
+GPT-6 Responses API call. The VLM selects one candidate coordinate; a Habitat
+navigation skill converts that target into primitive actions.
 
 ## Task contract
 
 | | |
 |---|---|
-| Model | whatever `~/.codex/config.toml` selects (currently `gpt-5.6-sol`) |
-| History | **every** atomic frame stored, **8** uniformly sampled per call, plain RGB |
-| Current view | RGB with numbered waypoint circles drawn on it |
-| HFOV | 90 |
+| Model | GPT-6 through an OpenAI-compatible Responses API |
+| History | every post-action raw RGB, **8** uniformly sampled per call |
+| Current view | RGB annotated with numbered frontier candidates |
+| HFOV | configurable; use `HFOV=90` or `HFOV=120` for comparison |
 | Reasoning turns | 10 max |
-| Output | `forward <25-100>` cm, `turn left/right <15-90>` deg, `stop` |
-| Chunk length | unbounded; the model decides how far to commit |
+| Output | `<frontiers_coord>(u,v)`, `<target>(u,v)`, `<action>...</action>`, or `STOP` |
+| Skill | `ShortestPathFollower` executes a selected world-space waypoint |
 
 ## Loop
 
@@ -22,21 +22,20 @@ out, and a depth-guarded executor runs it.
 observe()
   ├─ RGB / depth
   ├─ LocalMapper.update()          -> 160x160 robot-centric map {FREE, OCCUPIED, UNKNOWN}
-  ├─ sample_waypoints()            -> ray-march over 11 bearings + frontier points
-  │                                   occlusion-tested against depth
+  ├─ ExplorationTargetGenerator    -> explored/unexplored frontier contours
+  │                                   with floor, spacing, FOV and depth filters
   └─ annotate_rgb()                -> numbered circles (green = reachable, orange = frontier)
 
-VLNSelector.select()
-  ├─ prompt: vln_real PROMPT_TEMPLATE + the motion vocabulary
-  ├─ 8 history frames (plain RGB, oldest first)
-  └─ current annotated view        -> "<answer>turn left 30, forward 75</answer>"
+GPT-6 Responses API
+  ├─ prompt: instruction + all visible candidate pixel coordinates
+  ├─ 8 sampled raw action frames + current annotated RGB
+  └─ selects one coordinate, a fallback action sequence, or STOP
 
-actions.parse_chunk()              -> [turn left 30, forward 75]  (magnitudes clamped)
-actions.to_primitives()            -> [2, 2, 1, 1, 1]             (0.25 m / 15 deg steps)
+pixel_to_world()
+  └─ candidate match first; depth back-projection fallback
 
-ChunkExecutor.execute()
-  └─ runs each primitive; FORWARD is skipped and the chunk abandoned when depth
-     shows the corridor blocked, so the model sees the obstacle next turn
+ShortestPathFollower skill
+  └─ repeatedly plans and executes Habitat primitives until the waypoint is reached
 ```
 
 The circles are **reference only** — the model answers with motion, not with an
@@ -52,26 +51,43 @@ needs a fine-tuned head and is unavailable to a zero-shot API model. Its
 shape adopted here. The text chunk format itself matches `vln_real/actions.py`,
 so the simulator agent and the real-robot agent consume model output identically.
 
-## No navmesh in the executor
+## Navigation skill
 
-`ChunkExecutor` uses no `snap_point`, no `is_navigable`, no `find_path`, no
-`ShortestPathFollower`. It runs the model's primitives and guards FORWARD with a
-depth-derived corridor clearance. The topdown map fed to the candidate sampler is
-still a navmesh slice, matching AgentVLN; that is the remaining privileged
-component and is worth stating in any write-up.
+Like AgentVLN, coordinate predictions are matched to a candidate world point or
+back-projected with depth, then executed with Habitat's `ShortestPathFollower`.
+The fallback `<action>` output executes discrete Habitat actions directly.
+
+## Layout
+
+- `config/vln_r2r.yaml`: the only Habitat task configuration.
+- `eval.py`: complete model/history/map/API/Habitat evaluation loop in one file.
+- `gpt_vln/habitat_extensions/`: local measures and GT/pred top-map drawing.
+- `gpt_vln/visualization.py`: per-turn views and episode route visualization.
+- `scripts/run_eval.sh`: evaluation launcher and common experiment parameters.
 
 ## Usage
 
 ```bash
-cd /media/mldadmin/home/s125mdg38_06/AgentNav
-conda run -n streamvln python run.py --episode-id 412
-conda run -n streamvln python run.py --episode-id 1378 --max-turns 10
-conda run -n streamvln python run.py --episode-id 412 --dry-run      # one call, no movement
+cd /media/mldadmin/home/s125mdg38_06/GPT-VLN
+bash scripts/run_eval.sh
+EPISODE_ID=1378 MAX_TURNS=10 bash scripts/run_eval.sh
+EPISODE_ID=all NUM_EPISODES=20 bash scripts/run_eval.sh
+HISTORY_STRATEGY=recent HISTORY_FRAMES=6 bash scripts/run_eval.sh
+HFOV=120 HISTORY_STRATEGY=uniform HISTORY_FRAMES=8 bash scripts/run_eval.sh
+USE_API=0 VISUALIZE=1 bash scripts/run_eval.sh  # no-network pipeline smoke test
 ```
 
-Per-turn artefacts land in `outputs/episode_<id>/`: `turn_NN_rgb.png` (what the
-model saw), `turn_NN_local_map.png`, `turn_NN_depth.png`, `turn_NN_dashboard.png`,
-plus `trace.json` with every raw model answer and the primitives it expanded to.
+Per-turn artefacts land in `outputs/eval/episode_<id>/`: `turn_NN_input.png` (a
+diagnostic contact sheet), `turn_NN_rgb.png` (the annotated visualization),
+`turn_NN_local_map.png`, `turn_NN_depth.png`, `turn_NN_dashboard.png`,
+`turn_NN_inference.json` with the complete model input/output, and `trace.json`
+with the primitives it expanded to. `top_map_gt_pred.png` overlays the green GT
+route and red predicted route. Disable image output with `VISUALIZE=0`; JSON
+results are still produced.
+
+Every post-action raw RGB is stored in `raw_action_frames/action_NNNN.png`, with
+turn/action provenance in `raw_action_frames/index.json`. The top-map draws the
+full primitive trajectory and marks every inference endpoint as `T0`, `T1`, etc.
 
 ## Results
 
