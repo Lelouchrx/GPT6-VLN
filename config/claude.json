@@ -1,0 +1,6 @@
+{
+  "provider": "claude_sdk",
+  "model": "opus",
+  "claude_command": "claude",
+  "claude_config_dir": ".claude-vln-account"
+}

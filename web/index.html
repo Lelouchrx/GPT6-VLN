@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPT-VLN · Trajectory Replay</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">GPT-VLN / EVALUATION CONSOLE</p>
+      <h1>轨迹回放</h1>
+    </div>
+    <div class="source">
+      <label for="episode">选择轨迹</label>
+      <select id="episode"><option>正在扫描 outputs…</option></select>
+    </div>
+  </header>
+
+  <main>
+    <section class="mission panel">
+      <div class="mission-icon">⌁</div>
+      <div>
+        <span>导航指令</span>
+        <p id="instruction">载入轨迹后显示导航指令</p>
+        <p id="instruction-zh" class="instruction-zh" hidden></p>
+      </div>
+      <div class="badges">
+        <span id="episode-badge">EP —</span>
+        <span id="success-badge">—</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <article class="viewer panel">
+        <div class="panel-head">
+          <div><span>AGENT VIEW</span><strong id="frame-title">等待载入</strong></div>
+          <div class="live"><i></i> REPLAY</div>
+        </div>
+        <div class="stage">
+          <img id="agent-view" alt="智能体第一人称视角">
+          <div id="empty-view">未找到可播放的逐步帧</div>
+          <aside class="pip" id="decision-pip">
+            <header>
+              <span>本轮决策</span>
+              <strong id="pip-label">WAYPOINT</strong>
+            </header>
+            <canvas id="decision-canvas"></canvas>
+            <div id="pip-empty">本轮没有决策画面</div>
+            <p id="decision-caption">等待轨迹</p>
+          </aside>
+          <div class="stage-overlay">
+            <span id="turn-overlay">TURN —</span>
+            <span id="action-overlay">—</span>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="previous" title="上一帧">‹</button>
+          <button id="play" class="primary" title="播放 / 暂停">▶</button>
+          <button id="next" title="下一帧">›</button>
+          <div class="timeline-wrap">
+            <input id="timeline" type="range" min="0" max="0" value="0">
+            <div class="time-labels"><span id="frame-counter">0 / 0</span><span id="turn-counter">TURN 0 / 0</span></div>
+          </div>
+          <select id="speed" title="播放速度">
+            <option value="1000">0.5×</option>
+            <option value="500" selected>1×</option>
+            <option value="250">2×</option>
+            <option value="125">4×</option>
+          </select>
+          <label class="loop"><input id="loop" type="checkbox" checked> 循环</label>
+        </div>
+      </article>
+
+      <aside>
+        <section class="panel decision">
+          <div class="panel-head"><span>CURRENT DECISION</span><strong id="latency">—</strong></div>
+          <h2 id="decision-action">等待轨迹</h2>
+          <div id="macro-list" class="macro-list"></div>
+          <div class="detail-grid">
+            <div><span>状态</span><strong id="exec-status">—</strong></div>
+            <div><span>推理轮次</span><strong id="turn-value">—</strong></div>
+            <div><span>本轮行驶</span><strong id="travelled">—</strong></div>
+            <div><span>目标距离</span><strong id="target-distance">—</strong></div>
+            <div><span>本轮动作</span><strong id="turn-actions">—</strong></div>
+            <div><span>选中坐标</span><strong id="target-coord">—</strong></div>
+          </div>
+        </section>
+
+        <section class="panel map-panel">
+          <div class="panel-head">
+            <span>ROUTE / MAP</span>
+            <select id="map-kind"></select>
+          </div>
+          <div class="map-stage"><img id="map-view" alt="路线地图"><span id="no-map">无地图</span></div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="panel distances">
+      <div class="panel-head"><span>每轮距离</span><strong id="distance-total">—</strong></div>
+      <div id="turn-distance-list" class="distance-list"></div>
+    </section>
+
+    <section class="lower-grid">
+      <article class="panel reasoning">
+        <div class="panel-head"><span>模型输出</span><strong id="parse-status">—</strong></div>
+        <pre id="model-output">选择一条轨迹以查看模型输出。</pre>
+      </article>
+      <article class="panel metrics">
+        <div class="panel-head"><span>EPISODE METRICS</span><strong id="scene">—</strong></div>
+        <div id="metrics-grid" class="metrics-grid"></div>
+      </article>
+    </section>
+  </main>
+  <div id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
