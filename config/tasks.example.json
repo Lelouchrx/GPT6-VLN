@@ -1,0 +1,14 @@
+{
+  "split": "train",
+  "tasks": [
+    {
+      "id": "EPISODE_ID_FROM_DATASET",
+      "instruction": "Follow the provided navigation instruction."
+    }
+  ],
+  "config": {
+    "episode_budget": {
+      "primitives": 400
+    }
+  }
+}

@@ -4,9 +4,6 @@ defaults:
   - /habitat/task: vln_r2r
   - /habitat/simulator/agents@habitat.simulator.agents.main_agent: rgbd_agent
   - /habitat/dataset/vln: mp3d_r2r
-  - /habitat/task/lab_sensors:
-      - gps_sensor
-      - compass_sensor
   - _self_
 
 habitat:
