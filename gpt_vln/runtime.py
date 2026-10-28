@@ -18,6 +18,7 @@ from gpt_vln.pose_map import OwnPoseMap
 from gpt_vln.map import ObservedMap
 from gpt_vln.evidence_check import SemanticEvidenceAudit
 from gpt_vln.execution_contract import ExecutionContractCritic
+from gpt_vln.cost import SessionCostLedger
 from gpt_vln.clearance import forward_clearance
 from gpt_vln.target_tracker import TargetAnchorCritic
 from gpt_vln.entrances import EntranceGraph
@@ -85,14 +86,14 @@ class RGBBackend(LiveBackend):
   last_review_resolution=None
   review_inspection_counts={}
   pending_node_return=None
-  status='truncated';tokens=0;usd=0.;accounted=set();started=time.monotonic();previous=None;session_id=None
+  status='truncated';tokens=0;usd=0.;accounted=set();cost_ledger=SessionCostLedger();started=time.monotonic();previous=None;session_id=None
   def account(dp):
    nonlocal tokens,usd
    for f in Path(dp).glob('response_*.json'):
     if str(f) in accounted:continue
     accounted.add(str(f));d=read(f);u=d.get('usage') or {}
     tokens+=sum(u.get(k,0) or 0 for k in ('input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens'))
-    usd+=d.get('cost_usd') or 0
+    usd+=cost_ledger.add(d,str(f))
   def save_image(path,rgb,label,frame):
    path.parent.mkdir(parents=True,exist_ok=True)
    if path.exists():
@@ -286,6 +287,7 @@ class RGBBackend(LiveBackend):
                       'interruption_reason':(stall_alert or {}).get('reason')},
     'observed_semantic_map':mapctx,
     'keyframe_index':key_index[-16:],
+    'pending_route_review':pending_review,
     'pending_node_return':pending_node_return,
    }
    if decision==0:

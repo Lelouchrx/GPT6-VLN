@@ -151,8 +151,9 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
                   'review_response.current_test must be a nonempty sentence even when '
                   'review_response.resolution is not_applicable; state the current visual check. '
                   'If context.action_contract_error exists, correct that rejected output. '
-                  'It must satisfy this JSON schema; the runtime rejects invalid output:\n'
-                  + json.dumps(runner.nav.NAV, separators=(',', ':')) + '\n\n'
+                  'The runtime rejects invalid structured output.\n'
+                  + (json.dumps(runner.nav.NAV, separators=(',', ':'))
+                     if payload.get('provider') != 'claude' else '') + '\n\n'
                   + json.dumps(context, separators=(',', ':')))
         if no_semantic_map and not payload.get('pose_without_map'):
             prompt += ('\nThe supplied map contains geometry and visited-node connectivity only. '
