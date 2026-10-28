@@ -9,10 +9,11 @@ from gpt_vln.review_resolution import pending_route_review, validate_review_reso
 class ClearanceReviewTest(unittest.TestCase):
     def test_dense_near_surface_interrupts_before_motion(self):
         depth = np.full((400, 400), 2.0)
-        depth[176:240, 160:240] = .32
+        depth[176:240, 160:240] = .48
         result = forward_clearance(depth)
         self.assertTrue(result['interrupt'])
         self.assertEqual(result['verdict'], 'near_surface')
+        self.assertEqual(result['threshold_m'], .5)
 
     def test_sparse_or_invalid_depth_does_not_block(self):
         depth = np.full((400, 400), 2.0)

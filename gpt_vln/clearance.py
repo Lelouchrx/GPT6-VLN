@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def forward_clearance(depth, threshold_m=0.4):
+def forward_clearance(depth, threshold_m=0.5):
     values = np.asarray(depth, dtype=float).squeeze()
     if values.ndim != 2:
         raise ValueError('Front depth must be a two-dimensional metric image')
@@ -24,6 +24,7 @@ def forward_clearance(depth, threshold_m=0.4):
     return {'interrupt': interrupt,
             'verdict': 'near_surface' if interrupt else 'clear_or_uncertain',
             'clearance_m': round(clearance, 3),
+            'threshold_m': threshold_m,
             'near_fraction': round(near_fraction, 3),
             'valid_fraction': round(valid_fraction, 3),
             'reason': ('front depth shows a near surface before the next 25 cm forward step; '
