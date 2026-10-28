@@ -3,10 +3,37 @@ import unittest
 import numpy as np
 
 from gpt_vln.clearance import forward_clearance
-from gpt_vln.review_resolution import pending_route_review, validate_review_resolution
+from gpt_vln.review_resolution import (normalize_review_metadata,
+                                       pending_route_review, validate_review_resolution)
 
 
 class ClearanceReviewTest(unittest.TestCase):
+    def test_redundant_review_and_retrieved_frame_are_normalized(self):
+        output = {'skill': 'move', 'map_operation': 'none', 'map_node_id': None,
+                  'actions': [{'type': 'forward', 'centimeters': 25}],
+                  'history_panorama_ids': [40],
+                  'review_response': {'resolution': 'continue_with_counterevidence',
+                                      'map_node_id': None, 'evidence_frames': [40, 44],
+                                      'current_test': 'Compare the two doors'}}
+        normalized, changes = normalize_review_metadata(output, None, {40})
+        self.assertEqual(normalized['history_panorama_ids'], [])
+        self.assertEqual(normalized['review_response']['resolution'], 'not_applicable')
+        self.assertEqual(normalized['actions'], output['actions'])
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(output['history_panorama_ids'], [40])
+        validate_review_resolution(None, normalized['review_response'],
+                                   normalized, {40, 44}, 44)
+
+    def test_unretrieved_frame_and_real_review_are_not_normalized(self):
+        output = {'skill': 'move', 'map_operation': 'none', 'map_node_id': None,
+                  'history_panorama_ids': [40],
+                  'review_response': {'resolution': 'continue_with_counterevidence',
+                                      'map_node_id': None}}
+        pending = {'route_error_since_previous_review': 'possible_wrong_branch'}
+        normalized, changes = normalize_review_metadata(output, pending, set())
+        self.assertEqual(normalized, output)
+        self.assertEqual(changes, [])
+
     def test_dense_near_surface_interrupts_before_motion(self):
         depth = np.full((400, 400), 2.0)
         depth[176:240, 160:240] = .48

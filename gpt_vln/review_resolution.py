@@ -1,5 +1,26 @@
+import copy
 
 
+def normalize_review_metadata(output, review, retrieved_frames):
+    """Remove redundant metadata without changing a navigation command."""
+    value = copy.deepcopy(output)
+    changes = []
+    picks = value.get('history_panorama_ids')
+    if (isinstance(picks, list) and picks
+            and all(type(frame) is int and frame in retrieved_frames for frame in picks)):
+        value['history_panorama_ids'] = []
+        changes.append({'field': 'history_panorama_ids', 'original': picks,
+                        'reason': 'these frames were already retrieved by the memory tool'})
+    response = value.get('review_response') or {}
+    if (review is None and value.get('skill') == 'move'
+            and value.get('map_operation') == 'none'
+            and response.get('map_node_id') is None
+            and response.get('resolution') not in (None, 'not_applicable')):
+        response['resolution'] = 'not_applicable'
+        changes.append({'field': 'review_response.resolution',
+                        'original': output['review_response']['resolution'],
+                        'reason': 'no route review is pending; movement is unchanged'})
+    return value, changes
 
 def pending_route_review(latest, addressed=False):
     if latest is None or addressed:

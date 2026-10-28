@@ -27,7 +27,8 @@ from gpt_vln.route_contract import validate_compound_plan
 from gpt_vln.route_progress import route_progress_feedback
 from gpt_vln.stall import PoseStallCritic
 from gpt_vln.distance_check import GoalDistanceCheckpoint
-from gpt_vln.review_resolution import pending_route_review, review_remains_open, validate_review_resolution
+from gpt_vln.review_resolution import (pending_route_review, review_remains_open,
+                                        validate_review_resolution, normalize_review_metadata)
 from gpt_vln.return_check import return_arrival
 from gpt_vln.room_memory import RoomStageLedger
 from gpt_vln.frame_index import node_frame_index
@@ -305,6 +306,9 @@ class RGBBackend(LiveBackend):
    stall_alert=None
    for correction in range(2):
     try:
+     out,normalizations=normalize_review_metadata(out,ctx.get('pending_route_review'),retrieved)
+     if normalizations:
+      immutable(dp/f'contract_normalizations_{correction}.json',normalizations)
      picks=out.get('history_panorama_ids')
      if picks!=[]:raise ValueError('History is retrieved by tools; history_panorama_ids must be []')
      target=out.get('target',{});point=target.get('point_norm')
