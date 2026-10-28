@@ -31,13 +31,6 @@ def crop_horizon(output, mode):
     if sum(action['centimeters'] for action in executed
            if action['type'] == 'forward') > 150:
         raise ValueError('Executed prefix cannot request more than 150 cm forward')
-    if output.get('maneuver') in ('climb_up', 'climb_down'):
-        if any(action['type'] == 'forward' and action['centimeters'] != 25
-               for action in planned):
-            raise ValueError('Each stair advance must be 25 cm')
-        if any(action['type'] != 'forward' and action['degrees'] > 30
-               for action in planned):
-            raise ValueError('Each stair alignment turn must be at most 30 degrees')
     cropped = copy.deepcopy(output)
     cropped['actions'] = copy.deepcopy(executed)
     return cropped, {'mode': mode, 'planned': copy.deepcopy(planned),

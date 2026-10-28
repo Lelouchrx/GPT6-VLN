@@ -102,15 +102,16 @@ def _derive_places(path, spacing_m=2.5, snap_frac=0.6, jump_m=0.5, max_nodes=64)
     }
 
 class ObservedMap:
-    def __init__(self, sim, mpp=0.02, height_below_m=0.3):
+    def __init__(self, sim, mpp=0.02, height_below_m=0.3, enabled=True):
         self.sim, self.mpp = sim, mpp
+        self.enabled = enabled
         self.height_below_m = float(height_below_m)
         start = np.asarray(sim.get_agent_state().position, dtype=float)[[0, 2]]
         self.low = start - 20.0
         size = np.ceil(np.array([40.0, 40.0]) / mpp).astype(int) + 1
         self.shape = (int(size[1]), int(size[0]))
-        self.sums = np.zeros((*self.shape, 3), np.float32)
-        self.hits = np.zeros(self.shape, np.uint16)
+        self.sums = np.zeros((*self.shape, 3), np.float32) if enabled else None
+        self.hits = np.zeros(self.shape, np.uint16) if enabled else None
         self.path = []
         self.nodes = []
         self.edges = []
@@ -127,6 +128,8 @@ class ObservedMap:
 
     def observe(self, obs):
         self.record_pose()
+        if not self.enabled:
+            return
         state = self.sim.get_agent_state()
         q = state.rotation
         import quaternion
@@ -224,6 +227,8 @@ class ObservedMap:
                 'unknown_space':'never assumed free'}
 
     def render(self, path):
+        if not self.enabled:
+            return {'enabled': False}
         mask=self.hits>0
         points=np.asarray([p[[0,2]] for p in self.path])
         coords=np.rint((points-self.low)/self.mpp).astype(int)

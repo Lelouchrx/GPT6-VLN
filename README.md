@@ -1,16 +1,16 @@
 # GPT-VLN
 
 GPT-VLN navigates indoor Habitat scenes from language instructions and four
-simultaneous RGB views. The runtime builds an observed RGB-D geometry map,
-records measured robot motion, and keeps images of visited nodes for return.
-Node names and room labels are omitted from the navigation model input.
+simultaneous RGB views. The runtime records measured robot motion and keeps
+images and IDs of visited nodes for return. The navigation model receives its
+own measured pose, not a map image or room labels.
 
 ## Requirements
 
 Use a Python environment with Habitat-Sim, Habitat-Lab, NumPy, OpenCV, Pillow,
 and the dependencies in `requirements.txt`. Supply R2R scene assets and a task
-registration JSON separately. Install and configure the Codex CLI for model
-requests. Set `VLN_WORKSPACE` if the scene assets are outside the parent of this
+registration JSON separately. Configure Claude Agent SDK authentication for model requests. The Codex CLI
+can also be selected with `--provider codex`. Set `VLN_WORKSPACE` if the scene assets are outside the parent of this
 repository. Set `CODEX_HOME`, `NAV_CODEX_BIN`, and `NAV_MODEL_PYTHON` when their
 default discovery paths do not apply.
 
@@ -29,29 +29,34 @@ Run navigation:
 
 ```bash
 python eval.py --registration /path/to/tasks.json --episode EPISODE_ID \
-  --decisions 20 --action-horizon 3_to_2 --gpu 0
+  --provider claude --decisions 20 --action-horizon 4_to_3 --gpu 0
 ```
 
-`3_to_2` predicts three ordered commands and executes the first two.
-`4_to_3` predicts four and executes the first three. STOP uses an empty action
-list. The executed prefix is checked after every primitive and can be
-interrupted when actual motion conflicts with the command. To continue a saved
+The default asks the model to predict four ordered commands and executes the
+first three before observing again. Forward commands use 25, 50, 75, or 100 cm;
+turns use 15-degree increments up to 90 degrees. The same range is available
+when ascending or descending stairs. STOP uses an empty action list. The chosen
+actions are checked after every 25 cm primitive and can be interrupted when
+actual motion conflicts with the command. To continue a saved
 run, use the same arguments with a larger cumulative `--chunk-end`; source and
 registration hashes must remain unchanged.
 
 ## Flow
 
-1. Habitat supplies four RGB views and paired depth. The map contains observed
-   geometry only; unknown space is not treated as free.
+1. Habitat supplies four RGB views and paired depth for internal local checks.
+   No map image or map geometry is sent to the navigation model.
 2. The model receives the instruction, current views, measured own pose,
-   previous execution, and recorded visited-node connections.
+   previous execution, and IDs and connections of visited nodes.
 3. The model chooses movement or STOP. The runtime validates the response,
    executes a bounded prefix, and saves requested and actual actions.
 4. After each ten completed decisions, an independent visual reviewer checks
    route evidence before the next decision. It gives advice; the navigator
    retains movement and STOP authority.
-5. Requests, images, map snapshots, action logs, review records, and the final
+5. Requests, images, action logs, review records, and the final
    result are saved under `outputs/`.
+
+The map module retains its interface; RGB-D map accumulation and rendering are
+disabled. Measured pose and recorded visited-node connections remain active.
 
 ## Tests
 

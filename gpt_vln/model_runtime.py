@@ -12,6 +12,10 @@ from gpt_vln.runtime import RGBBackend as BaseBackend
 
 class RGBBackend(BaseBackend):
     def role_request(self, role, body, directory, images=None):
+        if role == 'periodic_route_review' and self.config.get('pose_without_map'):
+            body = dict(body)
+            pose_history = body.pop('gt_own_pose_map', {})
+            body['own_pose'] = pose_history.get('current')
         if role == 'periodic_route_review' and images and len(images) == 2:
             recent = body.get('actual_recent_transitions') or []
             if len(recent) >= 4:
@@ -40,6 +44,19 @@ class RGBBackend(BaseBackend):
                                        'gpt_vln/model_reviewer.py')
         if module != 'gpt_vln/model.py':
             return super().request(module, payload, directory, timeout)
+        if self.config.get('pose_without_map'):
+            payload = dict(payload)
+            payload['frames'] = [frame for frame in payload.get('frames', [])
+                                 if 'OBSERVED RGB-D MAP' not in frame['label']]
+            payload['context'] = dict(payload['context'])
+            observed = payload['context'].pop('observed_semantic_map', {})
+            payload['context']['own_pose'] = observed.get('current_pose')
+            payload['context']['visited_nodes'] = [
+                {'id': node['id'], 'links': node.get('links', []),
+                 'return_walked_m': node.get('return_walked_m'),
+                 'turn_deg_left': node.get('turn_deg_left')}
+                for node in observed.get('nodes', [])]
+            payload['pose_without_map'] = True
         if self.config.get('no_semantic_map'):
             payload = dict(payload, no_semantic_map=True)
         if self.config.get('execution_feedback_candidate'):
@@ -51,6 +68,7 @@ class RGBBackend(BaseBackend):
 
     def _codex_request(self, payload, directory, timeout, adapter):
         directory = Path(directory)
+        payload = dict(payload, provider=self.config.get('provider', 'codex'))
         immutable(directory / 'input.json', payload)
         response_path = directory / 'response_0.json'
         if response_path.exists():
@@ -63,6 +81,10 @@ class RGBBackend(BaseBackend):
                 sdk = sys.executable
             env = os.environ.copy()
             env['PYTHONPATH'] = str(root)
+            env.pop('CLAUDECODE', None)
+            if env.get('CODING_AGENT_ALLOW_API_KEY') != '1':
+                for key in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'):
+                    env.pop(key, None)
             env.setdefault('CODEX_HOME', str(Path.home() / '.codex'))
             process = subprocess.run(
                 [sdk, str(root / adapter)],

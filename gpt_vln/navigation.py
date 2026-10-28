@@ -13,6 +13,8 @@ class RGBBackend(BaseBackend):
         return super()._codex_request(payload, directory, timeout, adapter)
 
     def evaluate(self, version, task, directory):
+        if self.config['horizon_mode'] == 'free':
+            return super().evaluate(version, task, directory)
         original = runtime.validate_action
 
         def horizon_validate(output, instruction, available_frames=None, history_frames=None):

@@ -23,7 +23,8 @@ class ReviewContractTest(unittest.TestCase):
             {'type': 'text', 'text': json.dumps({'available_frame_ids': [1, 2]})}]}
         with mock.patch('gpt_vln.model_reviewer.subprocess.run', side_effect=fake_run):
             result = review(request)
-        self.assertIn('outside supplied images', result['error'])
+        self.assertEqual(len(result['attempts']), 2)
+        self.assertIn('outside supplied images', result['attempts'][0]['error'])
 
 
 if __name__ == '__main__':

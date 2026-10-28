@@ -44,10 +44,12 @@ def main():
     parser = argparse.ArgumentParser(description='Run observed RGB-D navigation')
     parser.add_argument('--registration', type=Path, required=True)
     parser.add_argument('--episode', required=True)
+    parser.add_argument('--provider', choices=('claude', 'codex'), default='claude')
+    parser.add_argument('--output-root', type=Path, default=ROOT / 'outputs')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--decisions', type=int, default=20)
     parser.add_argument('--chunk-end', type=int, default=None)
-    parser.add_argument('--action-horizon', choices=('3_to_2', '4_to_3'), default='3_to_2')
+    parser.add_argument('--action-horizon', choices=('free', '3_to_2', '4_to_3'), default='4_to_3')
     parser.add_argument('--preflight', action='store_true')
     args = parser.parse_args()
     if args.decisions < 0:
@@ -61,9 +63,13 @@ def main():
         parser.error('episode is absent from registration')
     from gpt_vln.actions import HORIZONS
     if args.preflight:
-        print(json.dumps({'episode': args.episode, 'model': 'gpt-6-sol',
-                          'semantic_map_input': False, 'observed_geometry': True,
-                          'visited_node_return': True, 'action_horizon': HORIZONS[args.action_horizon],
+        print(json.dumps({'episode': args.episode, 'model': 'claude-opus-5' if args.provider == 'claude' else 'gpt-6-sol',
+                          'semantic_map_input': False, 'map_input': False,
+                          'own_pose_input': True, 'observed_geometry': False,
+                          'visited_node_return': True,
+                          'action_horizon': None if args.action_horizon == 'free'
+                          else HORIZONS[args.action_horizon],
+                          'max_commands': 3 if args.action_horizon == 'free' else None,
                           'critic_every_decisions': 10,
                           'scheduled_critic_calls': max(0, (boundary - 1) // 10)}))
         return
@@ -74,7 +80,9 @@ def main():
     config = dict(registration.get('config') or {})
     config.update(mode='navigation_' + args.action_horizon, split=config.get('split', registration.get('split', 'train')),
                   route_review_interval=10, fork_decision=0, fork_frame=0,
-                  no_semantic_map=True, execution_feedback_candidate=True,
+                  no_semantic_map=True, pose_without_map=True, map_enabled=False,
+                  provider=args.provider,
+                  execution_feedback_candidate=False,
                   adaptive_batching=False, horizon_mode=args.action_horizon)
     config['episode_budget'] = {**config.get('episode_budget', {}),
                                 'decisions': args.decisions or 2**31 - 1,
@@ -83,7 +91,8 @@ def main():
         for path in (ROOT / 'gpt_vln').rglob('*.py')}
     config['runtime_hashes']['eval.py'] = sha(ROOT / 'eval.py')
     version = {'id': 'navigation', 'source': None, 'source_sha256': 'empty'}
-    output = ROOT / 'outputs' / f'{args.action_horizon}_{args.episode}_d{args.decisions}'
+    label = 'pose_only_climb_free' if args.action_horizon == '4_to_3' else args.action_horizon
+    output = args.output_root / f'{args.provider}_{label}_{args.episode}_d{args.decisions}'
     output.mkdir(parents=True, exist_ok=True)
     immutable(output / 'registration.json', {'config': config, 'task': task, 'version': version})
     run = output / 'run'

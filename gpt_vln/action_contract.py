@@ -18,10 +18,12 @@ No room layout, metric position, passability or floor number is established by a
 
 CLIMB SKILL: When ascending/descending, use maneuver=climb_up/climb_down only when supplied
 RGB shows relevant steps and an approach supported by the instruction. Identify visible tread,
-landing edge and stair direction in note; cite evidence_frames. Align with at most 30deg per
-turn and issue exactly ONE forward command of 25cm, then await returned RGB before selecting
-another climb action. One forward primitive is not one stair. Never infer number of risers or
-reaching a floor from requested travel, nominal motion or RGB-only pose scale. At apparent
+landing edge and stair direction in note; cite evidence_frames. Select any supported forward
+command from 25/50/75/100 cm and turn from 15..90 degrees. The executor expands forward travel
+into 25 cm primitives and checks measured motion and height after each primitive; a stall,
+collision, or reversed height progress interrupts the remaining batch and returns a fresh view.
+One forward primitive is not one stair. Never infer number of risers or reaching a floor from
+requested travel, nominal motion or RGB-only pose scale. At apparent
 landing, inspect all existing FLOOR4 tiles for continuation, then decide normal travel or
 another flight. For second-stair instructions require visual before/after tread evidence;
 unknown does not prove arrival. Repeated low progress enters bounded recovery; no repeated
@@ -87,10 +89,8 @@ def validate_action(out,instruction,available_frames=None,history_frames=None):
     if actions and not forward:
         clause=out.get('instruction_clause','')
         if mode!='instruction_orientation' or not clause.strip() or clause not in instruction:raise ValueError('No panoramic scan: pure turn requires original orientation goal')
-    if mode in ('climb_up','climb_down') and actions:
-        if len(forward)!=1 or forward[0]['centimeters']!=25:raise ValueError('Climb requires one 25cm advance then reobserve')
-        if any(a['type']!='forward' and a['degrees']>30 for a in actions):raise ValueError('Climb alignment is at most30deg per turn')
-        if not out.get('evidence_frames'):raise ValueError('Climb needs RGB evidence frames')
+    if mode in ('climb_up','climb_down') and actions and not out.get('evidence_frames'):
+        raise ValueError('Climb needs RGB evidence frames')
     anchor=out.get('return_anchor_frame')
     if history_frames is not None and anchor is not None and (type(anchor) is not int or anchor not in history_frames):raise ValueError('Return anchor must be an actual earlier frame')
     if mode=='return_to_anchor' and anchor is None:raise ValueError('Return needs an observed anchor')

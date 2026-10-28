@@ -10,6 +10,8 @@ import gpt_vln.model_contract as contract
 
 def run(payload):
     mode = payload['horizon_mode']
+    if mode == 'free':
+        return navigate_cli(dict(payload, merge_forward_commands=True))
     predicted, executed = HORIZONS[mode]
     original_prompt = contract.PROMPT
     original_schema = contract.runner.nav.NAV
@@ -22,18 +24,16 @@ def run(payload):
         ).replace(
             'Maximum THREE commands per decision, not three primitives.',
             'The horizon override below sets the predicted and executed command counts.'
-        ).replace(
-            'issue exactly ONE forward command of 25cm, then await returned RGB before selecting',
-            'predict short 25cm forward commands; the selected prefix executes with measured checks before selecting'
         ) + (
             f'\nHORIZON OVERRIDE: MOVE predicts exactly {predicted} ordered high-level '
             f'commands; only the first {executed} will execute, then the robot '
             'reobserves. Put at least one forward command in that executed prefix. '
-            'STOP is separate: skill=stop and actions=[]. On stairs every forward '
-            'command is 25 cm, each turn at most 30 degrees. The executed prefix '
+            'STOP is separate: skill=stop and actions=[]. On stairs use supported '
+            'forward commands from the same 25/50/75/100 cm set as elsewhere. The '
+            'executed prefix '
             'may request at most 150 cm total forward travel. The execution engine '
             'checks measured progress after every primitive and may interrupt early. '
-            'This override supersedes the older one-step climb and three-command '
+            'This override supersedes the older three-command '
             'limits in the preceding prompt.')
         attempts = []
         current = payload

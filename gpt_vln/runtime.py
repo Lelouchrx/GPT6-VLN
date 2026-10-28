@@ -71,7 +71,7 @@ class RGBBackend(LiveBackend):
    'input':'current labeled four-view panorama; historical four-view panoramas through model-chosen tools'})
   self.env.episodes=[self.episodes[task['id']]];obs=self.env.reset()
   if not any(k.endswith('map_depth') for k in obs):raise ValueError('Map depth sensors missing')
-  gtmap=OwnPoseMap(self.env.sim);map_state=ObservedMap(self.env.sim);motioncritic=ExecutionContractCritic();targetcritic=TargetAnchorCritic();task_goal_critic=TargetAnchorCritic();stallcritic=PoseStallCritic();goal_checkpoint=GoalDistanceCheckpoint(interval=10,regression_tolerance_m=.5)
+  gtmap=OwnPoseMap(self.env.sim);map_state=ObservedMap(self.env.sim, enabled=self.config.get('map_enabled', True));motioncritic=ExecutionContractCritic();targetcritic=TargetAnchorCritic();task_goal_critic=TargetAnchorCritic();stallcritic=PoseStallCritic();goal_checkpoint=GoalDistanceCheckpoint(interval=10,regression_tolerance_m=.5)
   entrances=PrefixEntranceGraph() if self.config.get('fork_decision',0)>0 else EntranceGraph()
   future_entrances=EntranceGraph() if self.config.get('fork_decision',0)>0 else entrances
   source=self.code_text(version);ledger=EvidenceLedger();pose=RGBPose();critic=NavigationCodeCritic(task['instruction'])
@@ -212,12 +212,13 @@ class RGBBackend(LiveBackend):
     side.paste(tile,(index*384,22));side_draw.text((index*384+8,4),label,fill='white')
    side_path=directory/'images'/f'{decision:03d}_{frame:04d}_CURRENT_270.jpg'
    side.save(side_path,'JPEG',quality=78)
-   map_image=Image.open(map_path).convert('RGB')
-   map_image.thumbnail((1000,1000),Image.Resampling.LANCZOS)
-   map_input_path=directory/'images'/f'{decision:03d}_{frame:04d}_CURRENT_OBSERVED_RGBD_MAP.jpg'
-   map_image.save(map_input_path,'JPEG',quality=82)
-   images=[{'source':current['source'],'label':f'CURRENT frame {frame} four simultaneous 90-degree views: FRONT, RIGHT, REAR, LEFT; tile edges are not continuous','frame':frame},
-           {'source':str(map_input_path),'label':f'CURRENT frame {frame} OBSERVED RGB-D MAP: yellow visited nodes, blue walked trace, red robot arrow, dark unknown; fixed world axes','frame':frame}]
+   images=[{'source':current['source'],'label':f'CURRENT frame {frame} four simultaneous 90-degree views: FRONT, RIGHT, REAR, LEFT; tile edges are not continuous','frame':frame}]
+   if self.config.get('map_enabled', True):
+    map_image=Image.open(map_path).convert('RGB')
+    map_image.thumbnail((1000,1000),Image.Resampling.LANCZOS)
+    map_input_path=directory/'images'/f'{decision:03d}_{frame:04d}_CURRENT_OBSERVED_RGBD_MAP.jpg'
+    map_image.save(map_input_path,'JPEG',quality=82)
+    images.append({'source':str(map_input_path),'label':f'CURRENT frame {frame} OBSERVED RGB-D MAP','frame':frame})
    by_id={r['id']:r for r in history}
    key_ids={e['frame'] for e in key_events if e['frame'] in by_id and
             e['kind'] in ('visited_node','direction_change','target_first_seen','entrance_candidate')}

@@ -77,18 +77,10 @@ def recent_execution_evidence(payload):
 
 
 def action_pacing(context):
-    if ((context.get('last_execution') or {}).get('blocked')
-            or context.get('candidate_conflicts')
-            or context.get('pending_node_return')):
-        return ('LOCAL CHECK: The last motion was blocked or a branch/return is unresolved. '
-                'Choose a short 25 cm observation-producing forward action if movement is needed.')
-    return ('ADAPTIVE FLAT-GROUND BATCHING: On a visually clear straight corridor with no '
-            'nearby doorway, branch, stair, target or obstacle, prefer one 75 or 100 cm '
-            'forward command so several 25 cm primitives execute before the next model '
-            'decision. If the visible corridor is shorter, choose 50 cm. Near a doorway, '
-            'branch, target, obstacle or any stair, choose 25 cm and reobserve. '
-            'For climb_up/down keep the existing mandatory single 25 cm step. '
-            'Use only visible evidence; unknown space is not clear. You choose the action.')
+    return ('Choose each forward distance freely from 25/50/75/100 cm and each '
+            'turn from 15 to 90 degrees in 15-degree increments. Combine '
+            'continuous same-heading motion into the fewest valid commands. '
+            'Measured progress is checked after each execution primitive.')
 
 
 def navigation_prompt(base_prompt, no_semantic_map):
@@ -96,6 +88,23 @@ def navigation_prompt(base_prompt, no_semantic_map):
         return base_prompt
     return re.sub(r'ROOM STAGE MEMORY:.*?(?=STABLE TASK-ENDPOINT ANCHOR:)',
                   '', base_prompt, flags=re.DOTALL)
+
+
+def pose_only_prompt(base_prompt):
+    prompt = re.sub(r'MEMORY CONTRACT:.*?(?=HORIZON OVERRIDE:|\Z)', '', base_prompt, flags=re.DOTALL)
+    prompt = re.sub(r'MAP SENSOR OVERRIDE:.*?(?=GT LOCALIZATION OVERRIDE:)',
+                    '', prompt, flags=re.DOTALL)
+    prompt = prompt.replace('Own pose and RGB-D observed mapping are available;',
+                            'Measured own pose is available;')
+    return prompt + ('\nPOSE AND VISITED NODES: The current input gives your measured '
+                     'own_pose relative to start and a list of visited node IDs with '
+                     'recorded connections and relative return bearings. There is no '
+                     'map image or map geometry in your input. Use the current four-view '
+                     'RGB and historical photos to judge route identity. You may request '
+                     'navigate_to_node for an existing visited node ID; the executor '
+                     'follows only recorded movement. Set room_stage_hypothesis to '
+                     'relation=none, node_id=null, room="", instruction_stage=null, '
+                     'evidence_frame=null; do not annotate nodes.\n')
 
 
 def cli_command(payload, image_paths, output_path, model='gpt-6-sol'):
@@ -128,7 +137,10 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
         selected = history_images(payload)
         no_semantic_map = payload.get('no_semantic_map', False)
         context = without_semantic_map(payload['context']) if no_semantic_map else payload['context']
-        prompt = (navigation_prompt(PROMPT, no_semantic_map)
+        base_prompt = navigation_prompt(PROMPT, no_semantic_map)
+        if payload.get('pose_without_map'):
+            base_prompt = pose_only_prompt(base_prompt)
+        prompt = (base_prompt
                   + '\nOnly use attached images and public navigation context. '
                   'Historical images retain their original heading. No memory tools are available. '
                   'Set history_panorama_ids=[]. Return exactly one JSON object, with no Markdown. '
@@ -138,7 +150,7 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
                   'It must satisfy this JSON schema; the runtime rejects invalid output:\n'
                   + json.dumps(runner.nav.NAV, separators=(',', ':')) + '\n\n'
                   + json.dumps(context, separators=(',', ':')))
-        if no_semantic_map:
+        if no_semantic_map and not payload.get('pose_without_map'):
             prompt += ('\nThe supplied map contains geometry and visited-node connectivity only. '
                        'Do not infer room identity from node IDs. Return room_stage_hypothesis '
                        'with relation=none, node_id=null, room="", instruction_stage=null, '
@@ -155,6 +167,17 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
                            'Near a suspected final doorway, use one short observation-producing '
                            'move and reassess the doorway relationship. Do not claim arrival '
                            'from a blocked action. You choose the action and STOP.')
+        if payload.get('merge_forward_commands'):
+            prompt += ('\nACTION FORMAT: Choose freely from one to three movement commands. '
+                       'Each forward command is 25, 50, 75, or 100 cm; each turn is '
+                       '15 to 90 degrees in 15 degree increments. Consecutive '
+                       'same-heading forward commands whose total is at most 100 cm '
+                       'represent one continuous movement: express them as one '
+                       'forward command with that total distance. If the total '
+                       'exceeds 100 cm, use the fewest valid forward commands. '
+                       'Choose the distance yourself from the available observation; '
+                       'there is no minimum distance or scene-specific distance rule. '
+                       'STOP is separate and has actions=[].')
         pacing = action_pacing(context) if payload.get('adaptive_batching') else None
         if pacing:
             prompt += '\n' + pacing
@@ -162,6 +185,13 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
         for frame_id, item, data in selected:
             images.append((f'HISTORICAL frame {frame_id}: '
                            + ('' if no_semantic_map else item.get('description', 'unverified place hypothesis')), data))
+        if payload.get('provider') == 'claude':
+            from gpt_vln.claude import complete
+            result = complete(prompt, images, runner.nav.NAV, payload.get('session_id'))
+            frames = [frame_id for frame_id, _, _ in selected]
+            result.update(retrieved_frame_ids=frames,
+                          memory_calls=[{'tool': 'automatic_history', 'frames': frames}] if frames else [])
+            return result
         with tempfile.TemporaryDirectory(prefix='vln_codex_') as directory:
             directory = Path(directory)
             output = directory / 'output.json'
