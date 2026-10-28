@@ -46,7 +46,8 @@ registration hashes must remain unchanged.
 1. Habitat supplies four RGB views and paired depth for internal local checks.
    No map image or map geometry is sent to the navigation model.
 2. The model receives the instruction, current views, measured own pose,
-   previous execution, and IDs and connections of visited nodes.
+   previous execution, and IDs and connections of visited nodes. Claude can
+   retrieve a saved historical panorama when a route comparison needs it.
 3. The model chooses movement or STOP. The runtime validates the response,
    executes a bounded prefix, and saves requested and actual actions.
 4. After each ten completed decisions, an independent visual reviewer checks

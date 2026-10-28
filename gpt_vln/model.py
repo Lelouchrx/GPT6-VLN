@@ -134,7 +134,7 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
         from gpt_vln.model_contract import PROMPT
         from gpt_vln.memory_model import runner
 
-        selected = history_images(payload)
+        selected = [] if payload.get('provider') == 'claude' else history_images(payload)
         no_semantic_map = payload.get('no_semantic_map', False)
         context = without_semantic_map(payload['context']) if no_semantic_map else payload['context']
         base_prompt = navigation_prompt(PROMPT, no_semantic_map)
@@ -142,7 +142,10 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
             base_prompt = pose_only_prompt(base_prompt)
         prompt = (base_prompt
                   + '\nOnly use attached images and public navigation context. '
-                  'Historical images retain their original heading. No memory tools are available. '
+                  'Historical images retain their original heading. If a route or '
+                  'branch comparison needs an old image, Claude may call retrieve_history '
+                  'with one or two frame IDs from keyframe_index or uniform_history_index. '
+                  'Do not retrieve history routinely. '
                   'Set history_panorama_ids=[]. Return exactly one JSON object, with no Markdown. '
                   'review_response.current_test must be a nonempty sentence even when '
                   'review_response.resolution is not_applicable; state the current visual check. '
@@ -187,10 +190,8 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
                            + ('' if no_semantic_map else item.get('description', 'unverified place hypothesis')), data))
         if payload.get('provider') == 'claude':
             from gpt_vln.claude import complete
-            result = complete(prompt, images, runner.nav.NAV, payload.get('session_id'))
-            frames = [frame_id for frame_id, _, _ in selected]
-            result.update(retrieved_frame_ids=frames,
-                          memory_calls=[{'tool': 'automatic_history', 'frames': frames}] if frames else [])
+            result = complete(prompt, images, runner.nav.NAV, payload.get('session_id'),
+                              payload.get('memory_catalog'))
             return result
         with tempfile.TemporaryDirectory(prefix='vln_codex_') as directory:
             directory = Path(directory)
