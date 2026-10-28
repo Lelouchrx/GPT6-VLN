@@ -29,7 +29,8 @@ Run navigation:
 
 ```bash
 python eval.py --registration /path/to/tasks.json --episode EPISODE_ID \
-  --provider claude --decisions 20 --action-horizon 4_to_3 --gpu 0
+  --provider claude --decisions 20 --action-horizon 4_to_3 \
+  --memory-policy uniform8 --gpu 0
 ```
 
 The default asks the model to predict four ordered commands and executes the
@@ -40,14 +41,20 @@ actions are checked after every 25 cm primitive and can be interrupted when
 actual motion conflicts with the command. To continue a saved
 run, use the same arguments with a larger cumulative `--chunk-end`; source and
 registration hashes must remain unchanged.
+Use `--max-usd N` to stop issuing new navigation requests after the recorded
+model cost reaches `N` USD. A cost stop is recorded as `budget_hold`, not as a
+navigation result.
 
 ## Flow
 
 1. Habitat supplies four RGB views and paired depth for internal local checks.
    No map image or map geometry is sent to the navigation model.
 2. The model receives the instruction, current views, measured own pose,
-   previous execution, and IDs and connections of visited nodes. Claude can
-   retrieve a saved historical panorama when a route comparison needs it.
+   previous execution, and IDs and connections of visited nodes. The default
+   `uniform8` policy starts a new navigation conversation at each decision,
+   attaches up to eight evenly sampled historical FRONT views, and retains a
+   short summary of the three most recent executed decisions. Older views stay
+   in the saved run but leave the model input as the selection changes.
 3. The model chooses movement or STOP. The runtime validates the response,
    executes a bounded prefix, and saves requested and actual actions.
 4. After each ten completed decisions, an independent visual reviewer checks

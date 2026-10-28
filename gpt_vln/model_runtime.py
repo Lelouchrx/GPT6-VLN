@@ -1,6 +1,7 @@
 
 import json
 import os
+import base64
 from pathlib import Path
 import subprocess
 import sys
@@ -57,6 +58,21 @@ class RGBBackend(BaseBackend):
                  'turn_deg_left': node.get('turn_deg_left')}
                 for node in observed.get('nodes', [])]
             payload['pose_without_map'] = True
+        if self.config.get('memory_policy') == 'uniform8':
+            payload = dict(payload)
+            catalog = payload.get('memory_catalog') or {}
+            archive = catalog.get('front_archive') or {}
+            root = Path(catalog.get('root', '/nonexistent')).resolve()
+            frames = list(payload.get('frames', []))
+            for frame_id in catalog.get('uniform_frame_ids', []):
+                path = Path(archive[str(frame_id)]).resolve()
+                if not path.is_relative_to(root) or not path.is_file():
+                    raise ValueError('Historical front image outside saved episode')
+                frames.append({'label':f'HISTORICAL FRONT frame {frame_id}; original heading',
+                               'data':base64.b64encode(path.read_bytes()).decode()})
+            payload['frames'] = frames
+            payload['supplied_history_frame_ids'] = list(catalog.get('uniform_frame_ids', []))
+            payload['stateless_navigation'] = True
         if self.config.get('no_semantic_map'):
             payload = dict(payload, no_semantic_map=True)
         if self.config.get('execution_feedback_candidate'):

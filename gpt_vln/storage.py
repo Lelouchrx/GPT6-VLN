@@ -8,6 +8,10 @@ class CampaignHold(RuntimeError):
     pass
 
 
+class BudgetHold(CampaignHold):
+    pass
+
+
 def read(path):
     return json.loads(Path(path).read_text())
 

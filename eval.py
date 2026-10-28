@@ -50,10 +50,14 @@ def main():
     parser.add_argument('--decisions', type=int, default=20)
     parser.add_argument('--chunk-end', type=int, default=None)
     parser.add_argument('--action-horizon', choices=('free', '3_to_2', '4_to_3'), default='4_to_3')
+    parser.add_argument('--memory-policy', choices=('uniform8', 'session'), default='uniform8')
+    parser.add_argument('--max-usd', type=float, default=None)
     parser.add_argument('--preflight', action='store_true')
     args = parser.parse_args()
     if args.decisions < 0:
         parser.error('decisions must be nonnegative')
+    if args.max_usd is not None and args.max_usd <= 0:
+        parser.error('max-usd must be positive')
     boundary = args.chunk_end if args.chunk_end is not None else (args.decisions or 20)
     if boundary < 1 or (args.decisions and boundary > args.decisions):
         parser.error('chunk-end must be within the decision limit')
@@ -71,17 +75,22 @@ def main():
                           else HORIZONS[args.action_horizon],
                           'max_commands': 3 if args.action_horizon == 'free' else None,
                           'critic_every_decisions': 10,
+                          'memory_policy': args.memory_policy,
+                          'max_usd': args.max_usd,
+                          'historical_front_views': 8 if args.memory_policy == 'uniform8' else 0,
                           'scheduled_critic_calls': max(0, (boundary - 1) // 10)}))
         return
     from gpt_vln.backend import sha
     from gpt_vln.files import write
-    from gpt_vln.storage import CampaignHold, immutable
+    from gpt_vln.storage import CampaignHold, BudgetHold, immutable
     from gpt_vln.navigation import RGBBackend
     config = dict(registration.get('config') or {})
-    config.update(mode='navigation_' + args.action_horizon, split=config.get('split', registration.get('split', 'train')),
+    config.update(mode='navigation_' + args.action_horizon + '_' + args.memory_policy,
+                  split=config.get('split', registration.get('split', 'train')),
                   route_review_interval=10, fork_decision=0, fork_frame=0,
                   no_semantic_map=True, pose_without_map=True, map_enabled=False,
-                  provider=args.provider,
+                  provider=args.provider, memory_policy=args.memory_policy,
+                  max_usd=args.max_usd,
                   execution_feedback_candidate=False,
                   adaptive_batching=False, horizon_mode=args.action_horizon)
     config['episode_budget'] = {**config.get('episode_budget', {}),
@@ -92,7 +101,7 @@ def main():
     config['runtime_hashes']['eval.py'] = sha(ROOT / 'eval.py')
     version = {'id': 'navigation', 'source': None, 'source_sha256': 'empty'}
     label = 'pose_only_climb_free' if args.action_horizon == '4_to_3' else args.action_horizon
-    output = args.output_root / f'{args.provider}_{label}_{args.episode}_d{args.decisions}'
+    output = args.output_root / f'{args.provider}_{label}_{args.memory_policy}_{args.episode}_d{args.decisions}'
     output.mkdir(parents=True, exist_ok=True)
     immutable(output / 'registration.json', {'config': config, 'task': task, 'version': version})
     run = output / 'run'
@@ -105,6 +114,9 @@ def main():
         immutable(run / 'result.json', result)
         write(output / 'state.json', {'status': 'complete', 'episode': args.episode,
                                         'decisions': result['decisions'], 'success': result['success']})
+    except BudgetHold as exc:
+        write(output / 'state.json', {'status': 'budget_hold', 'episode': args.episode,
+                                        'reason': str(exc)})
     except CampaignHold as exc:
         write(output / 'state.json', {'status': 'resumable_hold', 'episode': args.episode,
                                         'reason': str(exc)})

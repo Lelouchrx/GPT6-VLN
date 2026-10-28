@@ -10,7 +10,7 @@ def normalize_review_metadata(output, review, retrieved_frames):
             and all(type(frame) is int and frame in retrieved_frames for frame in picks)):
         value['history_panorama_ids'] = []
         changes.append({'field': 'history_panorama_ids', 'original': picks,
-                        'reason': 'these frames were already retrieved by the memory tool'})
+                        'reason': 'these frames were already supplied in this decision'})
     response = value.get('review_response') or {}
     if (review is None and value.get('skill') == 'move'
             and value.get('map_operation') == 'none'

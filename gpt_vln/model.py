@@ -108,6 +108,25 @@ def pose_only_prompt(base_prompt):
                      'evidence_frame=null; do not annotate nodes.\n')
 
 
+def stateless_prompt(prompt):
+    return (prompt.replace(
+        'Retrieved historical panoramas retain their old commanded heading.',
+        'Attached historical FRONT images retain their original heading.')
+        .replace('Evidence ledger is the single persistent ordered-route memory. Cite only actual frames.',
+                 'The original instruction and supplied recent execution summary are route memory. '
+                 'Cite only attached frame IDs.')
+        .replace('retrieve the anchor image and\nintermediate history',
+                 'compare any attached anchor FRONT image and\nrecent execution memory')
+        .replace('Uniform8 is fixed; an unsampled return anchor is only a textual reference, not a visible anchor.',
+                 'Uniform8 selection changes each decision; an unsampled return anchor is text only.')
+        .replace('In addition to uniform8 past FRONT images you receive explicitly labeled saved KEY\n'
+                 'horizontal panoramas. Use these for door/junction/stair evidence and return targets.',
+                 'Only the sampled FRONT images are visible history. Do not assume other saved '
+                 'panoramas are visible.')
+        .replace('with actual current/retrieved frame IDs',
+                 'with current or attached historical frame IDs'))
+
+
 def cli_command(payload, image_paths, output_path, model='gpt-6-sol'):
     codex = os.environ.get('NAV_CODEX_BIN') or shutil.which('codex')
     if not codex:
@@ -135,19 +154,31 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
         from gpt_vln.model_contract import PROMPT
         from gpt_vln.memory_model import runner
 
-        selected = [] if payload.get('provider') == 'claude' else history_images(payload)
+        selected = [] if (payload.get('provider') == 'claude'
+                          or payload.get('stateless_navigation')) else history_images(payload)
         no_semantic_map = payload.get('no_semantic_map', False)
         context = without_semantic_map(payload['context']) if no_semantic_map else payload['context']
         base_prompt = navigation_prompt(PROMPT, no_semantic_map)
         if payload.get('pose_without_map'):
             base_prompt = pose_only_prompt(base_prompt)
+        stateless = payload.get('stateless_navigation', False)
+        if stateless:
+            base_prompt = stateless_prompt(base_prompt)
         prompt = (base_prompt
                   + '\nOnly use attached images and public navigation context. '
-                  'Historical images retain their original heading. If a route or '
-                  'branch comparison needs an old image, Claude may call retrieve_history '
-                  'with one or two frame IDs from keyframe_index or uniform_history_index. '
-                  'Do not retrieve history routinely. '
-                  'Set history_panorama_ids=[]. Return exactly one JSON object, with no Markdown. '
+                  + ('Each decision is independent. The current four-view image and up to '
+                     'eight uniformly sampled historical FRONT images are the entire visual '
+                     'memory. Historical FRONT images retain their original heading and do '
+                     'not include side or rear views. The original instruction is repeated; '
+                     'recent_execution_memory and latest_review_summary are fallible compact '
+                     'memory. Unsupplied older views are unavailable. No memory retrieval '
+                     'tools are available. Cite only attached frame IDs. '
+                     if stateless else
+                     'Historical images retain their original heading. If a route or '
+                     'branch comparison needs an old image, Claude may call retrieve_history '
+                     'with one or two frame IDs from keyframe_index or uniform_history_index. '
+                     'Do not retrieve history routinely. ')
+                  + 'Set history_panorama_ids=[]. Return exactly one JSON object, with no Markdown. '
                   'review_response.current_test must be a nonempty sentence even when '
                   'review_response.resolution is not_applicable; state the current visual check. '
                   'If context.action_contract_error exists, correct that rejected output. '
@@ -193,7 +224,12 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
         if payload.get('provider') == 'claude':
             from gpt_vln.claude import complete
             result = complete(prompt, images, runner.nav.NAV, payload.get('session_id'),
-                              payload.get('memory_catalog'))
+                              payload.get('memory_catalog'), allow_memory_tools=not stateless)
+            if stateless:
+                frames = payload.get('supplied_history_frame_ids', [])
+                result['retrieved_frame_ids'] = frames
+                result['memory_calls'] = ([{'tool': 'uniform_front_attachment',
+                                           'frames': frames}] if frames else [])
             return result
         with tempfile.TemporaryDirectory(prefix='vln_codex_') as directory:
             directory = Path(directory)
@@ -231,11 +267,13 @@ def navigate_cli(payload, model='gpt-6-sol', timeout=600):
                 raise ValueError('Codex CLI did not return a resumable thread ID')
             usage = next((event.get('usage') for event in reversed(events)
                           if event.get('type') == 'turn.completed'), None) or {}
-            frames = [frame_id for frame_id, _, _ in selected]
+            frames = (payload.get('supplied_history_frame_ids', []) if stateless
+                      else [frame_id for frame_id, _, _ in selected])
             return {'output': answer, 'session_id': session_id, 'model': model,
                     'usage': usage, 'cost_usd': None, 'retrieved_frame_ids': frames,
                     'action_pacing_prompt': pacing,
-                    'memory_calls': [{'tool': 'automatic_history', 'frames': frames}] if frames else []}
+                    'memory_calls': [{'tool': 'uniform_front_attachment' if stateless
+                                      else 'automatic_history', 'frames': frames}] if frames else []}
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as exc:
         return {'error': f'{type(exc).__name__}: {exc}', 'usage_unknown': True}
 

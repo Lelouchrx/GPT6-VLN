@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Annotated
 
 
-def complete(prompt, images, schema, session_id=None, memory_catalog=None):
+def complete(prompt, images, schema, session_id=None, memory_catalog=None,
+             allow_memory_tools=True):
     async def run():
         from claude_agent_sdk import (ClaudeAgentOptions, ResultMessage,
                                       create_sdk_mcp_server, query, tool)
@@ -50,7 +51,9 @@ def complete(prompt, images, schema, session_id=None, memory_catalog=None):
             calls.append({'tool': 'retrieve_history', 'frames': ids})
             return {'content': content}
 
-        server = create_sdk_mcp_server(name='vln_memory', version='1.0.0', tools=[retrieve_history])
+        servers = ({'vln_memory':create_sdk_mcp_server(
+            name='vln_memory', version='1.0.0', tools=[retrieve_history])}
+            if allow_memory_tools else {})
         content = [{'type': 'text', 'text': prompt}]
         for label, data in images:
             content.extend([{'type': 'text', 'text': label},
@@ -62,8 +65,8 @@ def complete(prompt, images, schema, session_id=None, memory_catalog=None):
 
         options = ClaudeAgentOptions(
             model='claude-opus-5', tools=[],
-            allowed_tools=['mcp__vln_memory__retrieve_history'],
-            mcp_servers={'vln_memory': server}, strict_mcp_config=True,
+            allowed_tools=['mcp__vln_memory__retrieve_history'] if allow_memory_tools else [],
+            mcp_servers=servers, strict_mcp_config=True,
             permission_mode='dontAsk', setting_sources=[],
             max_turns=8, effort='high',
             max_buffer_size=64 * 1024 * 1024,

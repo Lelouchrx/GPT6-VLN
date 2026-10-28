@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 from gpt_vln.backend import LiveBackend,ROOT,sha
-from gpt_vln.storage import immutable,read,CampaignHold
+from gpt_vln.storage import immutable,read,CampaignHold,BudgetHold
 from gpt_vln.program import invoke
 from gpt_vln.sensors import create_rgb_env,views,integrate,EvidenceLedger
 from gpt_vln.pose import RGBPose
@@ -233,12 +233,14 @@ class RGBBackend(LiveBackend):
     uniform_ids=sorted({history[int(round(v))]['id'] for v in np.linspace(0,len(history)-1,min(8,len(history)))})
    archive={str(r['id']):{'path':r['image']['source'],'decision':i,'description':r['place']} for i,r in enumerate(history)}
    catalog={'root':str(directory.resolve()),'archive':archive,
+            'front_archive':{str(r['id']):r['front_image']['source'] for r in history},
             'keyframe_ids':sorted(key_ids),'uniform_frame_ids':uniform_ids,
             'node_frames':node_frame_index(map_state.nodes,history,gtmap.rows,map_state.path[0])}
    key_index=[{'frame':fid,'decision':archive[str(fid)]['decision'],
                'description_hypothesis':archive[str(fid)]['description'],
                'reasons':[e['kind'] for e in key_events if e['frame']==fid]} for fid in sorted(key_ids)]
-   allowed={frame,*by_id};all_frames={frame,*by_id}
+   stateless=self.config.get('memory_policy')=='uniform8'
+   allowed={frame,*(uniform_ids if stateless else by_id)};all_frames={frame,*by_id}
    recall_event=False;recall_frame=None
    ctx={'instruction':task['instruction'],'cause':'navigate','evidence_ledger':events,'last_execution':last,
     'pose_evidence':pose.context(),'code_critic':code,'actions_remaining':self.config['episode_budget']['primitives']-steps,
@@ -290,14 +292,32 @@ class RGBBackend(LiveBackend):
     'pending_route_review':pending_review,
     'pending_node_return':pending_node_return,
    }
-   if decision==0:
+   if stateless:
+    model_ctx['keyframe_index']=[]
+    model_ctx['uniform_history_index']=[{'frame':fid,'decision':archive[str(fid)]['decision']}
+                                         for fid in uniform_ids]
+    model_ctx['recent_execution_memory']=[{
+      'frame':r['id'], 'stage_hypothesis':r['stage'],
+      'actions':r['output']['actions'],
+      'measured_translation_m':round(sum(a.get('measured_translation_m',0)
+                                          for a in r['last_execution'].get('actual',[])),2),
+      'interrupted':r['last_execution'].get('critic_interrupted',False)}
+      for r in history[-3:]]
+    model_ctx['latest_review_summary']=(memory.latest or {}).get('task_summary','')
+   if decision==0 or stateless:
     model_ctx['instruction']=task['instruction']
+   if decision==0:
     model_ctx['memory_tools']=ctx['memory_tools']
     model_ctx['uniform_history_index']=ctx['uniform_history_index']
+   if stateless:
+    model_ctx.pop('memory_tools',None)
    if candidate_conflicts:model_ctx['candidate_conflicts']=candidate_conflicts[:2]
    immutable(dp/'evidence.json',{'context':model_ctx,'images':images,'step':frame,'decision':decision})
-   payload={'role':'navigate','context':model_ctx,'memory_catalog':catalog,'session_id':session_id,
+   payload={'role':'navigate','context':model_ctx,'memory_catalog':catalog,
+            'session_id':None if stateless else session_id,
             'frames':[{'label':im['label'],'data':base64.b64encode(Path(im['source']).read_bytes()).decode()} for im in images]}
+   if self.config.get('max_usd') is not None and usd >= self.config['max_usd']:
+    raise BudgetHold('Registered model cost cap reached; no navigation result')
    response=self.request('gpt_vln/model.py',payload,dp,360);account(dp);out=copy.deepcopy(response['output'])
    if not response.get('session_id'):raise ValueError('Model response did not include a resumable session ID')
    session_id=response['session_id']
