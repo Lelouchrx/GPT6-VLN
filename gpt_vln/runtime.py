@@ -18,6 +18,7 @@ from gpt_vln.pose_map import OwnPoseMap
 from gpt_vln.map import ObservedMap
 from gpt_vln.evidence_check import SemanticEvidenceAudit
 from gpt_vln.execution_contract import ExecutionContractCritic
+from gpt_vln.clearance import forward_clearance
 from gpt_vln.target_tracker import TargetAnchorCritic
 from gpt_vln.entrances import EntranceGraph
 from gpt_vln.entrance_history import EntranceGraph as PrefixEntranceGraph
@@ -170,7 +171,7 @@ class RGBBackend(LiveBackend):
        and last_review_resolution.get('checked_before_decision')==memory.latest.get('checked_before_decision')
        and not last_review_resolution.get('requires_followup'))
 
-   pending_review=None
+   pending_review=pending_route_review(memory.latest, review_already_addressed)
    if pending_review is not None and last_review_resolution and last_review_resolution.get('requires_followup'):
     pending_review['followup_after_inspection']=True
     pending_review['inspection_result_to_check']=last_review_resolution.get('current_test')
@@ -280,7 +281,8 @@ class RGBBackend(LiveBackend):
     'last_execution':{'executed_forward_primitives':ctx['last_execution']['executed_forward_primitives'],
                       'executed_turn_left_primitives':ctx['last_execution']['executed_turn_left_primitives'],
                       'executed_turn_right_primitives':ctx['last_execution']['executed_turn_right_primitives'],
-                      'blocked':bool(stall_alert)},
+                      'blocked':bool(stall_alert),
+                      'interruption_reason':(stall_alert or {}).get('reason')},
     'observed_semantic_map':mapctx,
     'keyframe_index':key_index[-16:],
     'pending_node_return':pending_node_return,
@@ -412,6 +414,15 @@ class RGBBackend(LiveBackend):
    critic.save_observation(frame,obs,out)
    for action in sequence:
     if steps>=self.config['episode_budget']['primitives'] or self.env.episode_over:break
+    if action==1:
+     clearance=forward_clearance(obs['rgb_map_depth'])
+     immutable(dp/f'forward_clearance_{steps:04d}_{len(actual):02d}.json',clearance)
+     if clearance['interrupt']:
+      stall_alert={'frame':steps,'reason':clearance['reason'],
+                   'clearance_m':clearance['clearance_m'],
+                   'completion':'unknown; near surface does not imply arrival'}
+      interrupted=True
+      break
     before=obs;prior_target=targetcritic.observe(self.env.sim)
     oldpos=np.array(self.env.sim.get_agent_state().position);oldheading=gtmap.rows[-1]['heading_xz_deg'];obs=self.env.step(action);steps+=1
     gtmap.record(steps);delta=np.array(self.env.sim.get_agent_state().position)-oldpos

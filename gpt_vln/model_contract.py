@@ -86,6 +86,8 @@ is permitted; do not continue the old branch or STOP. For possible_wrong_branch,
 choose backtrack_to_node, inspect_suspected_branch, or continue_with_counterevidence
 with actual current/retrieved frame IDs. backtrack_to_node requires map_node_id
 and map_operation=navigate_to_node to the same previously visited node.
+If the review's route verdict is contradicted, first inspect the disputed
+branch or return to a visited node; continuing requires a later observation.
 inspect_suspected_branch requires a short action directed at obtaining the stated
 visual check, no more than 50 cm forward, not another long batch on the disputed
 route. Inspection does NOT clear the warning: on the next decision, use the new
@@ -102,6 +104,8 @@ inspection or return to a visited node; another long forward prediction on
 the same corridor is not a valid response to repeated failed predictions.
 If no review is
 pending, use resolution=not_applicable and null map_node_id.
+If last_execution.interruption_reason reports a near surface from front depth,
+reobserve and choose a new direction; this is not proof of arrival or target identity.
 '''
 
 

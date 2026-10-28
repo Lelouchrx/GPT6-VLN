@@ -91,7 +91,8 @@ def navigation_prompt(base_prompt, no_semantic_map):
 
 
 def pose_only_prompt(base_prompt):
-    prompt = re.sub(r'MEMORY CONTRACT:.*?(?=HORIZON OVERRIDE:|\Z)', '', base_prompt, flags=re.DOTALL)
+    prompt = re.sub(r'MEMORY CONTRACT:.*?(?=STABLE TASK-ENDPOINT ANCHOR:)',
+                    '', base_prompt, flags=re.DOTALL)
     prompt = re.sub(r'MAP SENSOR OVERRIDE:.*?(?=GT LOCALIZATION OVERRIDE:)',
                     '', prompt, flags=re.DOTALL)
     prompt = prompt.replace('Own pose and RGB-D observed mapping are available;',

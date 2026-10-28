@@ -16,6 +16,7 @@ def pending_route_review(latest, addressed=False):
     pending = {key: latest.get(key) for key in (
         'route_error_since_previous_review', 'stage_progress', 'progress_hypothesis',
         'prediction_errors', 'frames', 'suggested_return_anchor_frame', 'next_check',
+        'route',
         'checked_before_decision')}
     pending['route_error_since_previous_review'] = effective
     pending['original_review_verdict'] = route_error
@@ -75,6 +76,8 @@ def validate_review_resolution(review, response, output, allowed_frames, current
         if review.get('inspection_count', 0) >= 2:
             raise ValueError('Two inspections failed to resolve this review; return to a visited node')
     if resolution == 'continue_with_counterevidence':
+        if review.get('route') == 'contradicted' and not review.get('followup_after_inspection'):
+            raise ValueError('Contradicted route requires a branch inspection or visited-node return first')
         if severity == 'confirmed_wrong_branch' or not cited:
             raise ValueError('Continuing requires a non-confirmed warning and supplied counterevidence frames')
         if current_frame not in cited:

@@ -30,10 +30,16 @@ class NavigationContractTest(unittest.TestCase):
         self.assertNotIn('MAP SENSOR OVERRIDE', prompt)
         self.assertNotIn('OBSERVED RGB-D MAP', prompt)
         self.assertIn('measured own_pose', prompt)
+        self.assertIn('MANDATORY REVIEW RESPONSE', prompt)
 
     def test_pose_prompt_retains_action_horizon(self):
-        prompt = pose_only_prompt('MEMORY CONTRACT: old map text\nHORIZON OVERRIDE: MOVE predicts exactly 4 commands')
+        prompt = pose_only_prompt(
+            'MEMORY CONTRACT: old map text\n'
+            'STABLE TASK-ENDPOINT ANCHOR: Keep the endpoint identity.\n'
+            'MANDATORY REVIEW RESPONSE: Handle pending review.\n'
+            'HORIZON OVERRIDE: MOVE predicts exactly 4 commands')
         self.assertIn('MOVE predicts exactly 4', prompt)
+        self.assertIn('MANDATORY REVIEW RESPONSE', prompt)
         self.assertNotIn('old map text', prompt)
 
     def test_review_is_due_before_next_decision(self):
