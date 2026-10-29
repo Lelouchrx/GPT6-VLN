@@ -14,8 +14,8 @@ can also be selected with `--provider codex`. Set `VLN_WORKSPACE` if the scene a
 repository. Set `CODEX_HOME`, `NAV_CODEX_BIN`, and `NAV_MODEL_PYTHON` when their
 default discovery paths do not apply.
 
-The registration format is shown in `config/tasks.example.json`. Replace its
-placeholder episode ID and instruction with a task from the configured dataset.
+Provide your own task registration JSON for the configured dataset.
+
 
 ## Run
 
