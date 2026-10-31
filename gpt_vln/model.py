@@ -95,7 +95,17 @@ def pose_only_prompt(base_prompt):
                      'navigate_to_node for an existing visited node ID; the executor '
                      'follows only recorded movement. Set room_stage_hypothesis to '
                      'relation=none, node_id=null, room="", instruction_stage=null, '
-                     'evidence_frame=null; do not annotate nodes.\n')
+                     'evidence_frame=null; do not annotate nodes.\n'
+                     'POSE HISTORY is a short chronological list of visited own poses, '
+                     'not a floor plan or a route to the hidden goal. Compare its '
+                     'heading and height with the instruction and the actual images. '
+                     'DEPTH PREFLIGHT samples a narrow forward corridor for roughly '
+                     'two 25 cm steps. possible_obstacle asks for a new visual check '
+                     'or shorter approach; unknown is not clear. The horizontal '
+                     'depth view cannot certify low steps, glass, or room identity. '
+                     'A warning around two steps ahead is advisory; only an '
+                     'imminent obstacle may interrupt a forward primitive. '
+                     'you still choose every subsequent movement and STOP.\n')
 
 
 def cli_command(payload, image_paths, output_path, model='gpt-6-astra'):
@@ -131,6 +141,23 @@ def navigate_cli(payload, model='gpt-6-astra', timeout=600):
         base_prompt = navigation_prompt(PROMPT, no_semantic_map)
         if payload.get('pose_without_map'):
             base_prompt = pose_only_prompt(base_prompt)
+        base_prompt += (
+            '\nLANDMARK IDENTITY CHECK: Before committing to an opening or landmark '
+            'that advances an instruction clause, compare the selected candidate '
+            'with the strongest visible alternative in the current or attached '
+            'historical panoramas. In review_response.current_test, name both by '
+            'visible appearance and frame/view, or state that no alternative is '
+            'visible. State the distinguishing instruction relation: approach '
+            'direction, order, landmark association, or turn at the junction. '
+            'A matching object category or an enlarging target supports recognition '
+            'or approach, but does not distinguish route identity. A small steering '
+            'correction does not by itself establish an instructed junction turn. '
+            'If both candidates remain plausible, keep identity unresolved and '
+            'choose a movement whose next view can distinguish them, using the '
+            'existing action horizon. Do not invent an alternative or reject a '
+            'candidate solely because another looks more typical. Once evidence '
+            'distinguishes the candidate, proceed without redundant comparison. '
+            'Record this check in existing fields; do not add output fields.\n')
         memory_prompt = (
             'Historical images retain their original heading. If a route or '
             'branch comparison needs an old image, Claude may call retrieve_history '

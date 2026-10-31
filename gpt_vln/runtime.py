@@ -15,6 +15,7 @@ from gpt_vln.route_review import RouteReviewMemory,merge_images
 from gpt_vln.storage import digest
 from gpt_vln.files import write
 from gpt_vln.pose_map import OwnPoseMap
+from gpt_vln.depth_preflight import forward_clearance
 from gpt_vln.map import ObservedMap
 from gpt_vln.evidence_check import SemanticEvidenceAudit
 from gpt_vln.execution_contract import ExecutionContractCritic
@@ -122,7 +123,8 @@ class RGBBackend(LiveBackend):
     key_events.append({'frame':history[-1]['id'],'kind':'visited_node','description':history[-1]['place']})
    last_node_count=len(map_state.nodes)
    map_path=directory/'observed_maps'/f'{decision:03d}_{frame:04d}.png'
-   map_path.parent.mkdir(parents=True,exist_ok=True)
+   if self.config.get('map_enabled',True):
+    map_path.parent.mkdir(parents=True,exist_ok=True)
    map_info=map_state.render(map_path)
    critic.before_decision(frame,history,obs,branch_anchor)
    code=critic.packet();wrapper=compatibility(decision)
@@ -268,6 +270,7 @@ class RGBBackend(LiveBackend):
     ctx['last_execution'].pop(field,None)
    gtctx=gtmap.context(branch_anchor);gtctx['cumulative_map']['points']=gtctx['cumulative_map']['points'][-4:]
    ctx['gt_own_pose_map']=gtctx
+   ctx['pose_history']=gtmap.history_summary([r['id'] for r in history])
    mapctx=map_state.context()
    mapctx['nodes']=[{k:v for k,v in n.items() if k in ('id','name','caption','visits','links','straight_m','return_walked_m','turn_deg_left','annotation_anchor','xy_m','xy_from_start_m','path_index')} for n in mapctx['nodes']]
    mapctx['room_stage_hypotheses']=room_stage.context()
@@ -284,6 +287,9 @@ class RGBBackend(LiveBackend):
     'keyframe_index':key_index[-16:],
     'pending_node_return':pending_node_return,
    }
+   if self.config.get('pose_without_map'):
+    model_ctx['pose_history']=ctx['pose_history']
+    model_ctx['depth_preflight']=forward_clearance(obs)
    if decision==0:
     model_ctx['instruction']=task['instruction']
     model_ctx['memory_tools']=ctx['memory_tools']
@@ -411,6 +417,13 @@ class RGBBackend(LiveBackend):
    critic.save_observation(frame,obs,out)
    for action in sequence:
     if steps>=self.config['episode_budget']['primitives'] or self.env.episode_over:break
+    if action==1 and self.config.get('depth_preflight_candidate'):
+     depth_risk=forward_clearance(obs)
+     if (depth_risk['status']=='possible_obstacle'
+         and depth_risk['clearance_m'] <= .30):
+      stall_alert={'frame':steps,'reason':'depth predicts a near obstacle before forward',
+                   'depth_preflight':depth_risk,'completion':'unknown; inspect or adjust approach'}
+      interrupted=True;break
     before=obs;prior_target=targetcritic.observe(self.env.sim)
     oldpos=np.array(self.env.sim.get_agent_state().position);oldheading=gtmap.rows[-1]['heading_xz_deg'];obs=self.env.step(action);steps+=1
     gtmap.record(steps);delta=np.array(self.env.sim.get_agent_state().position)-oldpos
@@ -476,8 +489,9 @@ class RGBBackend(LiveBackend):
       'critic_interrupted':interrupted,'blocked':bool(stall_alert),
       'requires_followup':(review_remains_open(pending_review,out['review_response'])
                            or pending_node_return is not None)}
-   write(directory/'observed_semantic_map.json',{'nodes':map_state.context(),'map_status':map_info})
-   write(directory/'predicted_semantic_graph.json',future_entrances.context(self.env.sim,active_only=False) if entrances is future_entrances else entrances.context(self.env.sim))
+   if self.config.get('map_enabled',True):
+    write(directory/'observed_semantic_map.json',{'nodes':map_state.context(),'map_status':map_info})
+    write(directory/'predicted_semantic_graph.json',future_entrances.context(self.env.sim,active_only=False) if entrances is future_entrances else entrances.context(self.env.sim))
    ledger.update(out['events'],all_frames)
    front=save_image(directory/'front_history'/f'{decision:03d}_{frame:04d}_FRONT.jpg',np.asarray(before_obs['rgb'])[...,:3],f'PAST frame {frame} FRONT',frame)
    history.append({'id':frame,'stage':out['stage'],'heading':heading,'place':out['place'],'note':out['note'],'events':out['events'],'last_execution':last,'front_image':front,'image':current})

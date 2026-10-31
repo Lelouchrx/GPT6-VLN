@@ -83,6 +83,7 @@ def main():
                   no_semantic_map=True, pose_without_map=True, map_enabled=False,
                   provider=args.provider,
                   execution_feedback_candidate=False,
+                  depth_preflight_candidate=True,
                   adaptive_batching=False, horizon_mode=args.action_horizon)
     config['episode_budget'] = {**config.get('episode_budget', {}),
                                 'decisions': args.decisions or 2**31 - 1,

@@ -20,3 +20,14 @@ class OwnPoseMap:
     'connections':'chronological executed trail only; no guaranteed reverse passability'},
    'return_anchor':a,'distance_to_anchor_m':round(float(np.linalg.norm(np.array(current['xyz_m'])-a['xyz_m'])),4) if a else None,
    'limitations':'Own localization does not prove correct room, target completion or stair ordinal. No goal/reference/navmesh access.'}
+
+ def history_summary(self, decision_frames, limit=8):
+  by_step={row['step']:row for row in self.rows}
+  frames=[step for step in decision_frames if step in by_step]
+  selected=[0]+frames[-(limit-2):]+[self.rows[-1]['step']]
+  selected=list(dict.fromkeys(selected))
+  rows=[by_step[step] for step in selected]
+  return {'source':'simulator own pose; episode-relative meters, no target or map',
+          'points':[{'frame':row['step'],'xyz_m':row['xyz_m'],
+                     'heading_xz_deg':row['heading_xz_deg']} for row in rows],
+          'meaning':'chronological visited poses; straight lines do not imply traversable shortcuts'}

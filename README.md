@@ -1,5 +1,7 @@
 # GPT-VLN
 
+The standalone failure-driven RSI development loop is in [rsi/README.md](rsi/README.md).
+
 GPT-VLN navigates indoor Habitat scenes from language instructions and four
 simultaneous RGB views. The runtime records measured robot motion and keeps
 images and IDs of visited nodes for return. The navigation model receives its
