@@ -229,7 +229,7 @@ class RGBBackend(LiveBackend):
    key_ids.update(n['anchor']['frame_id'] for n in map_state.nodes if n.get('anchor') and n['anchor'].get('frame_id') in by_id)
    if recall_frame in by_id:key_ids.add(recall_frame)
    uniform_ids=[history[i]['id'] for i in uniform_history_indices(len(history))]
-   archive={str(r['id']):{'path':r['front_image']['source'],'decision':i,'description':r['place']} for i,r in enumerate(history)}
+   archive={str(r['id']):{'path':r['image']['source'],'decision':i,'description':r['place']} for i,r in enumerate(history)}
    catalog={'root':str(directory.resolve()),'archive':archive,
             'keyframe_ids':sorted(key_ids),'uniform_frame_ids':uniform_ids,
             'node_frames':node_frame_index(map_state.nodes,history,gtmap.rows,map_state.path[0])}

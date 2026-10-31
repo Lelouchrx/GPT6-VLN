@@ -71,11 +71,11 @@ python -m unittest discover -s tests
 
 The deployed server defaults to the Codex provider with `gpt-6-astra`.
 For this provider, every decision automatically attaches up to eight archived
-FRONT images, uniformly sampled from the full chronological decision
-history. All available FRONT images are attached when there are fewer than eight.
+four-view panoramas, uniformly sampled from the full chronological decision
+history. All available panoramas are attached when there are fewer than eight.
 Sampling includes the earliest and latest historical observations and uses
 integer-floor spacing, matching the original GPT6-VLN uniform strategy.
-Keyframe labels do not affect selection. History contains one FRONT image per
+Keyframe labels do not affect selection. History contains one panorama per
 completed navigation decision; the current image is supplied separately.
 The uniform history index uses the same sampler. Memory logs record the
 strategy, budget, and actual selected frame IDs. The Claude provider retains
