@@ -164,7 +164,7 @@ def navigate_cli(payload, model='gpt-6-astra', timeout=600):
             'with one or two frame IDs from keyframe_index or uniform_history_index. '
             'Do not retrieve history routinely. '
             if payload.get('provider') == 'claude' else
-            'Up to eight historical four-view panoramas are attached automatically, '
+            'Up to eight historical FRONT images are attached automatically, '
             'uniformly sampled from the full chronological decision history. '
             'Historical images retain their original heading. No memory tools are available. ')
         prompt = (base_prompt

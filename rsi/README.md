@@ -2,7 +2,7 @@
 
 This directory is independent of the navigation runtime. The starting agent is
 the repository version: GPT-6 Astra, four current views, up to eight uniformly
-sampled historical panoramas, simulator own pose, a visited-node table, and no
+sampled historical FRONT images, simulator own pose, a visited-node table, and no
 map image. The shared runtime also supplies a short pose history and an
 advisory forward-depth warning. Node records are not a rendered map.
 
